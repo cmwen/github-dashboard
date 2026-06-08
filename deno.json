@@ -1,0 +1,63 @@
+{
+  "workspace": [
+    "apps/web",
+    "packages/domain"
+  ],
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@domain/": "./packages/domain/src/",
+    "@tanstack/react-query": "npm:@tanstack/react-query@5.80.7",
+    "@testing-library/jest-dom/": "npm:@testing-library/jest-dom@6.6.3/",
+    "@testing-library/react": "npm:@testing-library/react@16.3.0",
+    "@testing-library/user-event": "npm:@testing-library/user-event@14.6.1",
+    "octokit": "npm:octokit@5.0.4",
+    "pino": "npm:pino@9.7.0",
+    "react": "npm:react@19.1.0",
+    "react/": "npm:react@19.1.0/",
+    "react-dom/": "npm:react-dom@19.1.0/",
+    "react-router-dom": "npm:react-router-dom@7.6.2"
+  },
+  "compilerOptions": {
+    "jsx": "react",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "DOM.AsyncIterable",
+      "ES2023"
+    ],
+    "types": [
+      "npm:vite/client",
+      "npm:@types/react@19.1.8",
+      "npm:@types/react-dom@19.1.6"
+    ]
+  },
+  "tasks": {
+    "dev": "deno run -A npm:vite --config apps/web/vite.config.ts",
+    "build": "deno run -A npm:vite build --config apps/web/vite.config.ts",
+    "preview": "deno run -A npm:vite preview --config apps/web/vite.config.ts --host 127.0.0.1 --port 4173",
+    "check": "deno fmt --check && deno lint && deno check apps/web/src/main.tsx packages/domain/src/mod.ts apps/web/vite.config.ts playwright.config.ts",
+    "test:unit": "deno test -A packages/domain && deno run -A npm:vitest run --config apps/web/vite.config.ts --project unit",
+    "test:integration": "deno run -A npm:vitest run --config apps/web/vite.config.ts --project integration",
+    "install:browsers": "deno run -A npm:playwright install chromium",
+    "test:e2e": "deno run -A npm:playwright test --config playwright.config.ts",
+    "test": "deno task test:unit && deno task test:integration && deno task test:e2e"
+  },
+  "fmt": {
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false,
+    "exclude": [
+      "ui-prototype/"
+    ]
+  },
+  "lint": {
+    "exclude": [
+      "ui-prototype/"
+    ],
+    "rules": {
+      "tags": [
+        "recommended"
+      ]
+    }
+  }
+}

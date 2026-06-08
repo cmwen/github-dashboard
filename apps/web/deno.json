@@ -1,0 +1,4 @@
+{
+  "name": "@github-dashboard/web",
+  "exports": "./src/main.tsx"
+}

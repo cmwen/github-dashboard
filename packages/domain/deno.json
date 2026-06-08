@@ -1,0 +1,4 @@
+{
+  "name": "@github-dashboard/domain",
+  "exports": "./src/mod.ts"
+}
