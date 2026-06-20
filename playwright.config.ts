@@ -2,6 +2,18 @@
 
 import { defineConfig, devices } from "@playwright/test";
 
+function readEnvironmentValue(key: string): string | undefined {
+  return (globalThis as { Deno?: { env: { get(key: string): string | undefined } } }).Deno?.env
+    .get(key) ??
+    (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[
+      key
+    ];
+}
+
+const isCi = Boolean(readEnvironmentValue("CI"));
+const webServerCommand = readEnvironmentValue("PLAYWRIGHT_WEB_SERVER_COMMAND") ??
+  "deno task build && deno task preview";
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
@@ -13,9 +25,9 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "deno task build && deno task preview",
+    command: webServerCommand,
     port: 4173,
-    reuseExistingServer: !Deno.env.get("CI"),
+    reuseExistingServer: !isCi,
     timeout: 120_000,
   },
   projects: [

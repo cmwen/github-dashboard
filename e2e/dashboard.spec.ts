@@ -26,5 +26,5 @@ test("repository detail route is reachable from the dashboard", async ({ page })
   await page.getByRole("link", { name: "org/frontend-app" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "org/frontend-app" })).toBeVisible();
-  await expect(page.getByText(/customer-facing web app/i)).toBeVisible();
+  await expect(page.getByText(/central health view for pr velocity/i)).toBeVisible();
 });
