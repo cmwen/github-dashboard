@@ -4,7 +4,6 @@
     "jsr:@std/assert@^1.0.15": "1.0.19",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "npm:@playwright/test@1.53.1": "1.53.1",
-    "npm:@playwright/test@^1.53.1": "1.53.1",
     "npm:@tanstack/react-query@5.80.7": "5.80.7_react@19.1.0",
     "npm:@tanstack/react-query@^5.80.7": "5.80.7_react@19.1.0",
     "npm:@testing-library/jest-dom@6.6.3": "6.6.3",
@@ -3732,7 +3731,7 @@
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@playwright/test@^1.53.1",
+        "npm:@playwright/test@1.53.1",
         "npm:@tanstack/react-query@^5.80.7",
         "npm:@testing-library/jest-dom@^6.6.3",
         "npm:@testing-library/react@^16.3.0",
