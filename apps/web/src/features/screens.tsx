@@ -10,6 +10,7 @@ import {
 import { Link, useParams } from "react-router-dom";
 
 import { StatusPill } from "../components/StatusPill.tsx";
+import { mergePullRequest } from "../lib/github.ts";
 import { logger } from "../lib/logger.ts";
 import type {
   AppSettings,
@@ -267,6 +268,8 @@ export function PullRequestsScreen({
 }: PullRequestsScreenProps) {
   const [selectedPullRequestId, setSelectedPullRequestId] = useState<number | null>(null);
   const [mergedPullRequests, setMergedPullRequests] = useState<number[]>([]);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeErrorMessage, setMergeErrorMessage] = useState<string | undefined>();
   const profileLogin = data?.profile.login ?? "";
 
   const visiblePullRequests = useMemo(() => {
@@ -291,26 +294,53 @@ export function PullRequestsScreen({
   const selectedPullRequest =
     visiblePullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ??
       null;
-  const mergeBlocked = !selectedPullRequest || isPullRequestMergeBlocked(selectedPullRequest);
+  const mergeBlocked = !selectedPullRequest || isMerging ||
+    isPullRequestMergeBlocked(selectedPullRequest);
 
   function handleSelectPullRequest(pullRequest: PullRequestSummary): void {
     setSelectedPullRequestId(pullRequest.id);
+    setMergeErrorMessage(undefined);
     logger.info(
       { pullRequestId: pullRequest.id, repository: pullRequest.repositoryFullName },
       "PR selected",
     );
   }
 
-  function handleMergePullRequest(): void {
+  async function handleMergePullRequest(): Promise<void> {
     if (!selectedPullRequest || mergeBlocked) {
       return;
     }
 
-    setMergedPullRequests((currentValue) => [...currentValue, selectedPullRequest.id]);
-    logger.info(
-      { pullRequestId: selectedPullRequest.id, repository: selectedPullRequest.repositoryFullName },
-      "PR merged from dashboard",
-    );
+    setMergeErrorMessage(undefined);
+    setIsMerging(true);
+
+    try {
+      if (settings.dataSource === "live") {
+        await mergePullRequest(settings, selectedPullRequest);
+      }
+
+      setMergedPullRequests((currentValue) => [...currentValue, selectedPullRequest.id]);
+      logger.info(
+        {
+          pullRequestId: selectedPullRequest.id,
+          repository: selectedPullRequest.repositoryFullName,
+        },
+        "PR merged from dashboard",
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "GitHub rejected the merge request.";
+      setMergeErrorMessage(message);
+      logger.error(
+        {
+          message,
+          pullRequestId: selectedPullRequest.id,
+          repository: selectedPullRequest.repositoryFullName,
+        },
+        "PR merge failed",
+      );
+    } finally {
+      setIsMerging(false);
+    }
   }
 
   return (
@@ -358,6 +388,9 @@ export function PullRequestsScreen({
 
       <section className="container page-section">
         <DataStateNotice state={state} />
+        {mergeErrorMessage && (
+          <div className="card helper-card helper-card--danger">{mergeErrorMessage}</div>
+        )}
         <div className="card">
           <table className="table">
             <thead>
@@ -436,9 +469,9 @@ export function PullRequestsScreen({
                 className="btn btn-primary"
                 disabled={mergeBlocked}
                 type="button"
-                onClick={handleMergePullRequest}
+                onClick={() => void handleMergePullRequest()}
               >
-                Merge selected PR
+                {isMerging ? "Merging..." : "Merge selected PR"}
               </button>
             </div>
           </div>
