@@ -26,7 +26,7 @@
   --text-3xl: 40px;
   --text-4xl: 56px;
   --leading-body: 1.65;
-  --tracking-display: -0.02em;
+  --tracking-display: 0;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -37,8 +37,8 @@
   --space-12: 48px;
   --space-16: 64px;
   --section-y-tablet: 64px;
-  --radius-sm: 12px;
-  --radius-md: 16px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
   --radius-pill: 9999px;
   --elev-raised: 0 4px 16px rgba(13, 13, 13, 0.06);
   --focus-ring: 0 0 0 3px rgba(16, 163, 127, 0.12);
@@ -262,7 +262,7 @@ select {
 .eyebrow {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: var(--accent);
 }
@@ -308,11 +308,19 @@ select {
   gap: var(--space-4);
 }
 
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
 .card {
   background: var(--bg);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-md);
   padding: var(--space-6);
+  overflow-x: auto;
   transition: all var(--motion-base) var(--ease-standard);
 }
 
@@ -349,6 +357,15 @@ select {
 .label {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+.card-muted .metric .value {
+  font-size: var(--text-lg);
+}
+
+.stack-tight {
+  display: grid;
+  gap: var(--space-1);
 }
 
 .pill {
@@ -420,6 +437,7 @@ select {
 .table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 760px;
 }
 
 .table th,
@@ -435,7 +453,32 @@ select {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
+}
+
+.table-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  align-items: center;
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.row-selected {
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg));
+}
+
+.row-muted {
+  color: var(--muted);
+  background: var(--surface-warm);
+}
+
+.subtle-row-note {
+  display: block;
+  color: var(--meta);
+  font-size: var(--text-xs);
+  margin-top: var(--space-1);
 }
 
 .mono {
@@ -449,6 +492,19 @@ select {
   gap: var(--space-2);
 }
 
+.field-wide {
+  flex: 2 1 280px;
+}
+
+.check-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 input,
 select {
   width: 100%;
@@ -459,6 +515,13 @@ select {
   padding: 10px 12px;
   font-size: var(--text-base);
   transition: all var(--motion-fast) var(--ease-standard);
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  padding: 0;
 }
 
 input:focus,
@@ -481,6 +544,70 @@ select:focus {
 .toolbar > * {
   min-width: 180px;
   flex: 1;
+}
+
+.batch-panel {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 4;
+  box-shadow: var(--elev-raised);
+}
+
+.preflight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.preflight-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+  background: var(--bg);
+}
+
+.preflight-card--success {
+  border-color: color-mix(in oklab, var(--success), var(--border) 55%);
+}
+
+.preflight-card--warning {
+  border-color: color-mix(in oklab, var(--warn), var(--border) 55%);
+}
+
+.preflight-card--danger {
+  border-color: color-mix(in oklab, var(--danger), var(--border) 55%);
+}
+
+.result-list {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(220px, 1.4fr) minmax(140px, 0.8fr);
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.setup-doc {
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+.setup-doc ol {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 .stack {
@@ -522,6 +649,11 @@ select:focus {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .summary-strip,
+  .preflight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topnav-inner {
     min-height: auto;
     padding: var(--space-3) 0;
@@ -541,8 +673,18 @@ select:focus {
 
   .grid-2,
   .grid-3,
-  .grid-4 {
+  .grid-4,
+  .summary-strip,
+  .preflight-grid {
     grid-template-columns: 1fr;
+  }
+
+  .result-row {
+    grid-template-columns: 1fr;
+  }
+
+  .batch-panel {
+    position: static;
   }
 
   .table {
@@ -594,7 +736,18 @@ select:focus {
     font-size: 12px;
   }
 
-  .toolbar > * {
-    min-width: auto;
+  .toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar > *,
+  .field-wide {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .field-wide {
+    grid-column: 1 / -1;
   }
 }

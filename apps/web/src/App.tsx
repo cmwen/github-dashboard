@@ -12,7 +12,7 @@ import {
   WorkflowsScreen,
 } from "./features/screens.tsx";
 import { loadDashboardData } from "./lib/github.ts";
-import { configureLogger, installGlobalErrorHandlers, logger } from "./lib/logger.ts";
+import { installGlobalErrorHandlers, logger } from "./lib/logger.ts";
 import {
   type AppSettings,
   createDefaultSettings,
@@ -41,7 +41,13 @@ export function App() {
 function DashboardApplication() {
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const query = useQuery({
-    queryKey: ["dashboard-data", settings.dataSource, settings.token, settings.repositoryScope],
+    queryKey: [
+      "dashboard-data",
+      settings.dataSource,
+      settings.token,
+      settings.repositoryScope,
+      settings.includeArchivedRepositories,
+    ],
     queryFn: () => loadDashboardData(settings),
   });
 
@@ -50,9 +56,8 @@ function DashboardApplication() {
   }, [settings]);
 
   useEffect(() => {
-    configureLogger(settings);
     installGlobalErrorHandlers();
-  }, [settings]);
+  }, []);
 
   useEffect(() => {
     const root = document.documentElement;

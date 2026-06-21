@@ -9,7 +9,7 @@ when a token is available in the browser or at build time.
 - **Runtime/tooling:** Deno 2, Vite 7
 - **UI:** React 19, React Router 7, TanStack Query 5
 - **GitHub integration:** Octokit
-- **Observability:** pino with optional OpenObserve shipping to a local endpoint
+- **Observability:** browser console logging through pino
 - **PWA:** `vite-plugin-pwa`
 - **Quality:** Deno fmt/lint/check, Deno tests, Vitest, Testing Library, Playwright
 - **Delivery:** GitHub Actions CI and GitHub Pages deploy
@@ -29,23 +29,37 @@ when a token is available in the browser or at build time.
 ## Local development
 
 1. Copy `apps/web/.env.example` if you want build-time defaults.
-2. Set `VITE_GITHUB_TOKEN` to enable live GitHub data. Without it, the app runs against bundled mock
-   data.
-3. To ship browser logs to a local OpenObserve instance, set:
-
-```bash
-VITE_OPENOBSERVE_ENDPOINT=http://localhost:5080/api/default/nodejs/_json
-VITE_OPENOBSERVE_ACCESS_KEY=...
-```
-
-4. Run:
+2. Set `VITE_GITHUB_TOKEN` to enable live GitHub data locally. Without it, the app runs against
+   bundled mock data.
+3. Run:
 
 ```bash
 deno task dev
 ```
 
-The app stores theme and token settings in `localStorage`. For Pages deployments, mock data remains
-the safe default because browser-delivered secrets are public by nature.
+The app stores theme, queue filters, and token settings in `localStorage`. For Pages deployments,
+mock data remains the safe default because build-time browser secrets are public by nature. Prefer
+pasting a personal access token into the app locally after the page loads.
+
+## GitHub personal access token setup
+
+Use a fine-grained personal access token when possible:
+
+- **Repository access:** select only the owners/repositories you want the dashboard to manage.
+- **Pull requests: read/write:** required to read PR metadata and send merge requests.
+- **Contents: read/write:** required by some merge paths and branch protection configurations.
+- **Actions: read:** lets the dashboard explain workflow state and blocked merge candidates.
+- **Metadata: read:** included by GitHub automatically and used to identify repositories.
+
+Classic token fallback:
+
+- Use `public_repo` for public repositories only.
+- Use `repo` if you need private repositories.
+- Add `read:org` so organization repositories can be discovered.
+- Add `workflow` only if your organization requires workflow access for status visibility.
+
+Never commit a PAT. Avoid setting `VITE_GITHUB_TOKEN` in GitHub Pages builds because the token would
+be shipped to every browser that loads the site.
 
 ## Commands
 

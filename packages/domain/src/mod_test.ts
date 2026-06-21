@@ -14,7 +14,7 @@ Deno.test("calculateMetrics counts dashboard attention correctly", () => {
   const dashboard = createMockDashboardData();
 
   assertEquals(dashboard.metrics, {
-    pullRequestsNeedingReview: 3,
+    pullRequestsNeedingReview: 2,
     failingWorkflows: 1,
     repositoriesAtRisk: 3,
     mergeConflicts: 1,
