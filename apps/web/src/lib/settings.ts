@@ -4,6 +4,8 @@ export type ThemeMode = "system" | "light" | "dark";
 export type DataSourceMode = "mock" | "live";
 export type PullRequestCreatorFilter = "dependabot" | "all" | "me";
 export type PullRequestSortOrder = "urgent" | "updated" | "created";
+export type PullRequestStatusFilter = "all" | "mergeable" | "blocked" | "attention";
+export type RepositorySortOrder = "attention" | "open-prs" | "updated";
 export type WorkflowAlertThreshold = "failed" | "warn" | "all";
 
 export interface AppSettings {
@@ -12,21 +14,20 @@ export interface AppSettings {
   readonly token: string;
   readonly repositorySearch: string;
   readonly repositoryGroup: RepoGroup | "all";
+  readonly repositorySort: RepositorySortOrder;
+  readonly includeArchivedRepositories: boolean;
+  readonly pullRequestSearch: string;
   readonly pullRequestCreator: PullRequestCreatorFilter;
+  readonly pullRequestStatus: PullRequestStatusFilter;
   readonly pullRequestSort: PullRequestSortOrder;
   readonly repositoryScope: RepoGroup | "all";
   readonly workflowAlertThreshold: WorkflowAlertThreshold;
-  readonly openObserveEndpoint: string;
-  readonly openObserveAccessKey: string;
 }
 
 export const SETTINGS_STORAGE_KEY = "github-dashboard.settings";
-const DEFAULT_OPENOBSERVE_ENDPOINT = import.meta.env.VITE_OPENOBSERVE_ENDPOINT?.trim() ??
-  "http://localhost:5080/api/default/nodejs/_json";
 
 export function createDefaultSettings(): AppSettings {
   const envToken = import.meta.env.VITE_GITHUB_TOKEN?.trim() ?? "";
-  const envOpenObserveAccessKey = import.meta.env.VITE_OPENOBSERVE_ACCESS_KEY?.trim() ?? "";
 
   return {
     theme: "system",
@@ -34,12 +35,14 @@ export function createDefaultSettings(): AppSettings {
     token: envToken,
     repositorySearch: "",
     repositoryGroup: "all",
+    repositorySort: "attention",
+    includeArchivedRepositories: false,
+    pullRequestSearch: "",
     pullRequestCreator: "dependabot",
+    pullRequestStatus: "all",
     pullRequestSort: "urgent",
     repositoryScope: "all",
     workflowAlertThreshold: "failed",
-    openObserveEndpoint: DEFAULT_OPENOBSERVE_ENDPOINT,
-    openObserveAccessKey: envOpenObserveAccessKey,
   };
 }
 
@@ -58,8 +61,8 @@ export function loadSettings(): AppSettings {
       ...defaults,
       ...parsed,
       token: parsed.token?.trim() ?? defaults.token,
-      openObserveEndpoint: parsed.openObserveEndpoint?.trim() ?? defaults.openObserveEndpoint,
-      openObserveAccessKey: parsed.openObserveAccessKey?.trim() ?? defaults.openObserveAccessKey,
+      repositorySearch: parsed.repositorySearch?.trim() ?? defaults.repositorySearch,
+      pullRequestSearch: parsed.pullRequestSearch?.trim() ?? defaults.pullRequestSearch,
     };
   } catch {
     return defaults;
@@ -78,7 +81,7 @@ export function updateSettings(
     ...settings,
     ...patch,
     token: patch.token?.trim() ?? settings.token,
-    openObserveEndpoint: patch.openObserveEndpoint?.trim() ?? settings.openObserveEndpoint,
-    openObserveAccessKey: patch.openObserveAccessKey?.trim() ?? settings.openObserveAccessKey,
+    repositorySearch: patch.repositorySearch?.trim() ?? settings.repositorySearch,
+    pullRequestSearch: patch.pullRequestSearch?.trim() ?? settings.pullRequestSearch,
   };
 }

@@ -37,6 +37,7 @@ interface GitHubRepositorySummary {
   readonly created_at?: string | null;
   readonly open_issues_count: number;
   readonly stargazers_count: number;
+  readonly archived?: boolean | null;
 }
 
 interface SearchPullRequestIssue {
@@ -102,6 +103,7 @@ export async function loadDashboardData(settings: AppSettings): Promise<Dashboar
     {
       dataSource: settings.dataSource,
       repositoryScope: settings.repositoryScope,
+      includeArchivedRepositories: settings.includeArchivedRepositories,
     },
     "Loading dashboard data",
   );
@@ -188,7 +190,11 @@ async function loadLiveDashboardData(settings: AppSettings): Promise<DashboardDa
     reviewRequests: pullRequestCounts.get(repository.fullName) ?? repository.reviewRequests,
   }));
 
-  const scopedRepositories = filterRepositoriesByScope(repositories, settings.repositoryScope);
+  const scopedRepositories = filterRepositoriesByScope(
+    repositories,
+    settings.repositoryScope,
+    settings.includeArchivedRepositories,
+  );
   const scopedRepositoryNames = new Set(
     scopedRepositories.map((repository) => repository.fullName),
   );
@@ -506,6 +512,7 @@ function mapRepositorySummary(
     reviewRequests: openPrCount,
     workflowState: "healthy",
     stars: repository.stargazers_count,
+    archived: repository.archived ?? false,
   };
 }
 
@@ -730,7 +737,11 @@ function mapWorkflowState(
 }
 
 function applyRepositoryScope(data: DashboardData, settings: AppSettings): DashboardData {
-  const repositories = filterRepositoriesByScope(data.repositories, settings.repositoryScope);
+  const repositories = filterRepositoriesByScope(
+    data.repositories,
+    settings.repositoryScope,
+    settings.includeArchivedRepositories,
+  );
   const repositoryNames = new Set(repositories.map((repository) => repository.fullName));
   const pullRequests = data.pullRequests.filter((pullRequest) =>
     repositoryNames.has(pullRequest.repositoryFullName)
@@ -751,10 +762,15 @@ function applyRepositoryScope(data: DashboardData, settings: AppSettings): Dashb
 function filterRepositoriesByScope(
   repositories: readonly RepositorySummary[],
   scope: AppSettings["repositoryScope"],
+  includeArchivedRepositories: boolean,
 ): readonly RepositorySummary[] {
+  const visibleRepositories = includeArchivedRepositories
+    ? repositories
+    : repositories.filter((repository) => !repository.archived);
+
   if (scope === "all") {
-    return repositories;
+    return visibleRepositories;
   }
 
-  return repositories.filter((repository) => repository.group === scope);
+  return visibleRepositories.filter((repository) => repository.group === scope);
 }

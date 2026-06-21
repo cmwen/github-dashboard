@@ -17,6 +17,8 @@ import type {
   DataSourceMode,
   PullRequestCreatorFilter,
   PullRequestSortOrder,
+  PullRequestStatusFilter,
+  RepositorySortOrder,
   ThemeMode,
   WorkflowAlertThreshold,
 } from "../lib/settings.ts";
@@ -56,6 +58,15 @@ export interface SettingsScreenProps {
 }
 
 type RepositoryDetailTab = "prs" | "issues" | "workflows";
+type MergeOutcome = "merged" | "failed" | "skipped";
+
+interface MergeResult {
+  readonly pullRequestId: number;
+  readonly title: string;
+  readonly repositoryFullName: string;
+  readonly outcome: MergeOutcome;
+  readonly message: string;
+}
 
 export function LauncherScreen({ data, state }: SharedScreenProps) {
   return (
@@ -141,11 +152,22 @@ export function DashboardScreen({
   state,
 }: DashboardScreenProps) {
   const repositories = data
-    ? filterRepositories(data.repositories, {
-      searchTerm: settings.repositorySearch,
-      group: settings.repositoryGroup,
-    })
+    ? sortRepositoriesForDashboard(
+      filterRepositories(data.repositories, {
+        searchTerm: settings.repositorySearch,
+        group: settings.repositoryGroup,
+      }),
+      settings.repositorySort,
+    )
     : [];
+  const visibleOpenPullRequests = repositories.reduce(
+    (total, repository) => total + repository.openPrCount,
+    0,
+  );
+  const visibleFailingRepositories =
+    repositories.filter((repository) => repository.workflowState === "failing").length;
+  const visibleArchivedRepositories = repositories.filter((repository) => repository.archived)
+    .length;
 
   return (
     <section className="screen">
@@ -155,6 +177,12 @@ export function DashboardScreen({
             <p className="eyebrow">dashboard</p>
             <h1>Repo attention across personal, org, and contributing projects.</h1>
           </div>
+        </div>
+        <div className="summary-strip" aria-label="Visible repository summary">
+          <MetricCard label="Visible repos" value={String(repositories.length)} />
+          <MetricCard label="Open PRs in view" value={String(visibleOpenPullRequests)} />
+          <MetricCard label="Failing repos" value={String(visibleFailingRepositories)} />
+          <MetricCard label="Archived included" value={String(visibleArchivedRepositories)} />
         </div>
         <div className="toolbar toolbar--with-margin" aria-label="Repository filters">
           <div className="field">
@@ -184,6 +212,30 @@ export function DashboardScreen({
               <option value="contributing">Contributing repos</option>
             </select>
           </div>
+          <div className="field">
+            <label className="label" htmlFor="repo-sort">Sort by</label>
+            <select
+              id="repo-sort"
+              value={settings.repositorySort}
+              onChange={(event) =>
+                onUpdateSettings({
+                  repositorySort: event.currentTarget.value as RepositorySortOrder,
+                })}
+            >
+              <option value="attention">Attention needed</option>
+              <option value="open-prs">Open PR count</option>
+              <option value="updated">Recently updated</option>
+            </select>
+          </div>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={settings.includeArchivedRepositories}
+              onChange={(event) =>
+                onUpdateSettings({ includeArchivedRepositories: event.currentTarget.checked })}
+            />
+            Include archived repos
+          </label>
         </div>
       </section>
 
@@ -211,6 +263,7 @@ export function DashboardScreen({
             <thead>
               <tr>
                 <th>Repository</th>
+                <th>Attention</th>
                 <th>Group</th>
                 <th>Latest commit</th>
                 <th>Open PRs</th>
@@ -222,11 +275,14 @@ export function DashboardScreen({
               {repositories.length === 0
                 ? (
                   <tr>
-                    <td className="empty" colSpan={6}>No repositories match this filter.</td>
+                    <td className="empty" colSpan={7}>No repositories match this filter.</td>
                   </tr>
                 )
                 : repositories.map((repository) => (
-                  <tr key={repository.id}>
+                  <tr
+                    className={repository.archived ? "row-muted" : undefined}
+                    key={repository.id}
+                  >
                     <td>
                       <Link
                         className="inline-link"
@@ -234,7 +290,9 @@ export function DashboardScreen({
                       >
                         {repository.fullName}
                       </Link>
+                      {repository.archived && <span className="subtle-row-note">Archived</span>}
                     </td>
+                    <td>{renderRepositoryAttention(repository)}</td>
                     <td>{formatGroup(repository.group)}</td>
                     <td className="mono">{formatDateTime(repository.lastCommitAt)}</td>
                     <td className="mono">{repository.openPrCount}</td>
@@ -266,18 +324,30 @@ export function PullRequestsScreen({
   settings,
   state,
 }: PullRequestsScreenProps) {
-  const [selectedPullRequestId, setSelectedPullRequestId] = useState<number | null>(null);
+  const [selectedPullRequestIds, setSelectedPullRequestIds] = useState<number[]>([]);
   const [mergedPullRequests, setMergedPullRequests] = useState<number[]>([]);
   const [isMerging, setIsMerging] = useState(false);
   const [mergeErrorMessage, setMergeErrorMessage] = useState<string | undefined>();
+  const [mergeResults, setMergeResults] = useState<MergeResult[]>([]);
   const profileLogin = data?.profile.login ?? "";
 
   const visiblePullRequests = useMemo(() => {
+    const normalizedSearch = settings.pullRequestSearch.trim().toLowerCase();
     const filteredPullRequests = (data?.pullRequests ?? [])
       .filter((pullRequest) => !mergedPullRequests.includes(pullRequest.id))
       .filter((pullRequest) => {
         const creator = getPullRequestCreatorCategory(pullRequest, profileLogin);
         return settings.pullRequestCreator === "all" || creator === settings.pullRequestCreator;
+      })
+      .filter((pullRequest) =>
+        normalizedSearch.length === 0 ||
+        pullRequest.title.toLowerCase().includes(normalizedSearch) ||
+        pullRequest.repositoryFullName.toLowerCase().includes(normalizedSearch) ||
+        pullRequest.labelNames.some((label) => label.toLowerCase().includes(normalizedSearch))
+      )
+      .filter((pullRequest) => {
+        const bucket = getPullRequestStatusBucket(pullRequest);
+        return settings.pullRequestStatus === "all" || bucket === settings.pullRequestStatus;
       });
 
     return filteredPullRequests.toSorted((left, right) =>
@@ -288,71 +358,160 @@ export function PullRequestsScreen({
     mergedPullRequests,
     profileLogin,
     settings.pullRequestCreator,
+    settings.pullRequestSearch,
     settings.pullRequestSort,
+    settings.pullRequestStatus,
   ]);
 
-  const selectedPullRequest =
-    visiblePullRequests.find((pullRequest) => pullRequest.id === selectedPullRequestId) ??
-      null;
-  const mergeBlocked = !selectedPullRequest || isMerging ||
-    isPullRequestMergeBlocked(selectedPullRequest);
+  const selectedPullRequests = visiblePullRequests.filter((pullRequest) =>
+    selectedPullRequestIds.includes(pullRequest.id)
+  );
+  const mergeablePullRequests = selectedPullRequests.filter((pullRequest) =>
+    !isPullRequestMergeBlocked(pullRequest)
+  );
+  const blockedSelectedPullRequests = selectedPullRequests.filter(isPullRequestMergeBlocked);
+  const readyVisiblePullRequests = visiblePullRequests.filter((pullRequest) =>
+    !isPullRequestMergeBlocked(pullRequest)
+  );
+  const visibleBlockedCount = visiblePullRequests.filter(isPullRequestMergeBlocked).length;
+  const selectedPullRequestIdSet = new Set(selectedPullRequestIds);
+  const mergeBlocked = mergeablePullRequests.length === 0 || isMerging;
 
-  function handleSelectPullRequest(pullRequest: PullRequestSummary): void {
-    setSelectedPullRequestId(pullRequest.id);
+  function handleTogglePullRequest(pullRequest: PullRequestSummary): void {
+    setSelectedPullRequestIds((currentValue) =>
+      currentValue.includes(pullRequest.id)
+        ? currentValue.filter((pullRequestId) => pullRequestId !== pullRequest.id)
+        : [...currentValue, pullRequest.id]
+    );
     setMergeErrorMessage(undefined);
+    setMergeResults([]);
     logger.info(
       { pullRequestId: pullRequest.id, repository: pullRequest.repositoryFullName },
-      "PR selected",
+      "PR selection toggled",
     );
   }
 
-  async function handleMergePullRequest(): Promise<void> {
-    if (!selectedPullRequest || mergeBlocked) {
+  function handleSelectReadyPullRequests(): void {
+    setSelectedPullRequestIds(readyVisiblePullRequests.map((pullRequest) => pullRequest.id));
+    setMergeErrorMessage(undefined);
+    setMergeResults([]);
+  }
+
+  function handleClearSelectedPullRequests(): void {
+    setSelectedPullRequestIds([]);
+    setMergeErrorMessage(undefined);
+  }
+
+  async function handleMergeSelectedPullRequests(): Promise<void> {
+    if (mergeBlocked) {
       return;
     }
 
     setMergeErrorMessage(undefined);
+    setMergeResults([]);
     setIsMerging(true);
 
-    try {
-      if (settings.dataSource === "live") {
-        await mergePullRequest(settings, selectedPullRequest);
+    const results = await Promise.allSettled(
+      mergeablePullRequests.map(async (pullRequest): Promise<MergeResult> => {
+        if (settings.dataSource === "live") {
+          await mergePullRequest(settings, pullRequest);
+        }
+
+        return {
+          pullRequestId: pullRequest.id,
+          title: pullRequest.title,
+          repositoryFullName: pullRequest.repositoryFullName,
+          outcome: "merged",
+          message: "Merge request accepted",
+        };
+      }),
+    );
+    const nextResults: MergeResult[] = results.map((result, index) => {
+      const pullRequest = mergeablePullRequests[index];
+
+      if (result.status === "fulfilled") {
+        return result.value;
       }
 
-      setMergedPullRequests((currentValue) => [...currentValue, selectedPullRequest.id]);
-      logger.info(
-        {
-          pullRequestId: selectedPullRequest.id,
-          repository: selectedPullRequest.repositoryFullName,
-        },
-        "PR merged from dashboard",
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "GitHub rejected the merge request.";
+      const message = result.reason instanceof Error
+        ? result.reason.message
+        : "GitHub rejected the merge request.";
+
+      return {
+        pullRequestId: pullRequest.id,
+        title: pullRequest.title,
+        repositoryFullName: pullRequest.repositoryFullName,
+        outcome: "failed",
+        message,
+      };
+    });
+
+    const skippedResults = blockedSelectedPullRequests.map((pullRequest): MergeResult => ({
+      pullRequestId: pullRequest.id,
+      title: pullRequest.title,
+      repositoryFullName: pullRequest.repositoryFullName,
+      outcome: "skipped",
+      message: getPullRequestBlockReason(pullRequest),
+    }));
+    const mergedPullRequestIds = nextResults
+      .filter((result) => result.outcome === "merged")
+      .map((result) => result.pullRequestId);
+    const failedResults = nextResults.filter((result) => result.outcome === "failed");
+
+    setMergedPullRequests((currentValue) => [...currentValue, ...mergedPullRequestIds]);
+    setSelectedPullRequestIds((currentValue) =>
+      currentValue.filter((pullRequestId) => !mergedPullRequestIds.includes(pullRequestId))
+    );
+    setMergeResults([...nextResults, ...skippedResults]);
+
+    if (failedResults.length > 0) {
+      const message = `${failedResults.length} merge request${
+        failedResults.length === 1 ? "" : "s"
+      } failed. Review the result list before retrying.`;
       setMergeErrorMessage(message);
-      logger.error(
-        {
-          message,
-          pullRequestId: selectedPullRequest.id,
-          repository: selectedPullRequest.repositoryFullName,
-        },
-        "PR merge failed",
-      );
-    } finally {
-      setIsMerging(false);
     }
+
+    logger.info(
+      {
+        attempted: mergeablePullRequests.length,
+        merged: mergedPullRequestIds.length,
+        failed: failedResults.length,
+        skipped: skippedResults.length,
+      },
+      "Batch PR merge completed",
+    );
+
+    setIsMerging(false);
   }
 
   return (
     <section className="screen">
       <section className="container page-section">
         <p className="eyebrow">pull requests hub</p>
-        <h1>Dependabot-first queue with urgent conflicts and failed checks at the top.</h1>
+        <h1>Batch Dependabot merges with the risky work kept out of the way.</h1>
         <p className="lead">
-          Use creator and sort controls to triage all repositories in one place, then execute merge
-          actions without leaving the hub.
+          Start from the full Dependabot queue, select the mergeable set you trust, send merge
+          requests together, then review the result list without bouncing through GitHub one PR at a
+          time.
         </p>
+        <div className="summary-strip" aria-label="Pull request summary">
+          <MetricCard label="PRs in view" value={String(visiblePullRequests.length)} />
+          <MetricCard label="Mergeable" value={String(readyVisiblePullRequests.length)} />
+          <MetricCard label="Blocked" value={String(visibleBlockedCount)} />
+          <MetricCard label="Selected" value={String(selectedPullRequests.length)} />
+        </div>
         <div className="toolbar toolbar--with-margin">
+          <div className="field field-wide">
+            <label className="label" htmlFor="pr-search">Search queue</label>
+            <input
+              id="pr-search"
+              type="search"
+              placeholder="repository, title, or label..."
+              value={settings.pullRequestSearch}
+              onChange={(event) =>
+                onUpdateSettings({ pullRequestSearch: event.currentTarget.value })}
+            />
+          </div>
           <div className="field">
             <label className="label" htmlFor="creator-filter">Creator filter</label>
             <select
@@ -366,6 +525,22 @@ export function PullRequestsScreen({
               <option value="dependabot">Dependabot</option>
               <option value="all">All creators</option>
               <option value="me">Only me</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="label" htmlFor="status-filter">Merge state</label>
+            <select
+              id="status-filter"
+              value={settings.pullRequestStatus}
+              onChange={(event) =>
+                onUpdateSettings({
+                  pullRequestStatus: event.currentTarget.value as PullRequestStatusFilter,
+                })}
+            >
+              <option value="mergeable">Mergeable now</option>
+              <option value="blocked">Blocked</option>
+              <option value="attention">Needs review</option>
+              <option value="all">All states</option>
             </select>
           </div>
           <div className="field">
@@ -392,9 +567,27 @@ export function PullRequestsScreen({
           <div className="card helper-card helper-card--danger">{mergeErrorMessage}</div>
         )}
         <div className="card">
+          <div className="table-actions">
+            <div>
+              <h3>PR queue</h3>
+              <p className="label">
+                {readyVisiblePullRequests.length} ready, {visibleBlockedCount}{" "}
+                blocked in the current filter.
+              </p>
+            </div>
+            <div className="row">
+              <button className="btn" type="button" onClick={handleSelectReadyPullRequests}>
+                Select mergeable
+              </button>
+              <button className="btn" type="button" onClick={handleClearSelectedPullRequests}>
+                Clear
+              </button>
+            </div>
+          </div>
           <table className="table">
             <thead>
               <tr>
+                <th>Select</th>
                 <th>PR</th>
                 <th>Repository</th>
                 <th>Creator</th>
@@ -407,12 +600,28 @@ export function PullRequestsScreen({
               {visiblePullRequests.length === 0
                 ? (
                   <tr>
-                    <td className="empty" colSpan={6}>No pull requests in this filter.</td>
+                    <td className="empty" colSpan={7}>No pull requests in this filter.</td>
                   </tr>
                 )
                 : visiblePullRequests.map((pullRequest) => (
-                  <tr key={pullRequest.id}>
-                    <td>{pullRequest.title}</td>
+                  <tr
+                    className={selectedPullRequestIdSet.has(pullRequest.id) ? "row-selected" : ""}
+                    key={pullRequest.id}
+                  >
+                    <td>
+                      <input
+                        aria-label={`Select ${pullRequest.title}`}
+                        checked={selectedPullRequestIdSet.has(pullRequest.id)}
+                        type="checkbox"
+                        onChange={() => handleTogglePullRequest(pullRequest)}
+                      />
+                    </td>
+                    <td>
+                      <div className="stack-tight">
+                        <span>{pullRequest.title}</span>
+                        <span className="label">{formatPullRequestMeta(pullRequest)}</span>
+                      </div>
+                    </td>
                     <td className="mono">{pullRequest.repositoryFullName}</td>
                     <td>
                       {formatPullRequestCreator(
@@ -423,13 +632,9 @@ export function PullRequestsScreen({
                     <td>{renderPullRequestStatus(pullRequest)}</td>
                     <td className="mono">{formatDateTime(pullRequest.updatedAt)}</td>
                     <td>
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => handleSelectPullRequest(pullRequest)}
-                      >
-                        Select
-                      </button>
+                      <a className="btn" href={pullRequest.url} target="_blank" rel="noreferrer">
+                        Open
+                      </a>
                     </td>
                   </tr>
                 ))}
@@ -439,42 +644,78 @@ export function PullRequestsScreen({
       </section>
 
       <section className="container page-section">
-        <div className="card card-muted">
+        <div className="card card-muted batch-panel">
           <div className="row-between">
             <div>
-              <h3>{selectedPullRequest?.title ?? "Select a PR row to enable merge controls."}</h3>
+              <h3>Batch merge preflight</h3>
               <p className="label">
-                {selectedPullRequest
-                  ? `${selectedPullRequest.repositoryFullName} · ${
-                    formatPullRequestMeta(selectedPullRequest)
-                  }`
-                  : "No PR selected."}
+                {mergeablePullRequests.length} will be sent to GitHub.{" "}
+                {blockedSelectedPullRequests.length} selected PRs are blocked and will be skipped.
               </p>
             </div>
             <div className="row">
-              <a
-                className={`btn ${selectedPullRequest ? "" : "btn-disabled"}`}
-                href={selectedPullRequest?.url ?? "#"}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => {
-                  if (!selectedPullRequest) {
-                    event.preventDefault();
-                  }
-                }}
-              >
-                Open on GitHub
-              </a>
               <button
                 className="btn btn-primary"
                 disabled={mergeBlocked}
                 type="button"
-                onClick={() => void handleMergePullRequest()}
+                onClick={() => void handleMergeSelectedPullRequests()}
               >
-                {isMerging ? "Merging..." : "Merge selected PR"}
+                {isMerging ? "Merging..." : `Merge ${mergeablePullRequests.length} PRs`}
               </button>
             </div>
           </div>
+          <div className="preflight-grid">
+            <PreflightCard
+              label="Will merge"
+              tone="success"
+              value={String(mergeablePullRequests.length)}
+            />
+            <PreflightCard
+              label="Skipped"
+              tone="warning"
+              value={String(blockedSelectedPullRequests.length)}
+            />
+            <PreflightCard
+              label="Checks look green"
+              tone="success"
+              value={String(mergeablePullRequests.filter(hasPassingChecks).length)}
+            />
+            <PreflightCard
+              label="Need attention"
+              tone="danger"
+              value={String(blockedSelectedPullRequests.length)}
+            />
+          </div>
+          {selectedPullRequests.length > 0 && (
+            <div className="result-list">
+              {selectedPullRequests.slice(0, 6).map((pullRequest) => (
+                <div className="result-row" key={pullRequest.id}>
+                  <span className="mono">
+                    {pullRequest.repositoryFullName}#{pullRequest.number}
+                  </span>
+                  <span>{pullRequest.title}</span>
+                  <span>{renderPullRequestStatus(pullRequest)}</span>
+                </div>
+              ))}
+              {selectedPullRequests.length > 6 && (
+                <p className="label">+ {selectedPullRequests.length - 6} more selected</p>
+              )}
+            </div>
+          )}
+          {mergeResults.length > 0 && (
+            <div className="result-list">
+              <h3>Merge results</h3>
+              {mergeResults.map((result) => (
+                <div className="result-row" key={`${result.pullRequestId}-${result.outcome}`}>
+                  <StatusPill tone={mapMergeOutcomeTone(result.outcome)}>
+                    {formatMergeOutcome(result.outcome)}
+                  </StatusPill>
+                  <span>{result.repositoryFullName}</span>
+                  <span className="label">{result.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -777,8 +1018,8 @@ export function SettingsScreen({
         <p className="eyebrow">settings / filters</p>
         <h1>Tune default triage behavior for pull requests and alerts.</h1>
         <p className="lead">
-          These settings persist in local storage so the dashboard behaves like a real product
-          surface while you evaluate sorting, focus defaults, and local observability.
+          These settings persist in local storage. The app is static on GitHub Pages, so your token
+          stays in this browser and is used only for direct GitHub API calls.
         </p>
       </section>
 
@@ -818,6 +1059,23 @@ export function SettingsScreen({
             </div>
 
             <div className="field">
+              <label className="label" htmlFor="status-default">Default PR state</label>
+              <select
+                id="status-default"
+                value={settings.pullRequestStatus}
+                onChange={(event) =>
+                  onUpdateSettings({
+                    pullRequestStatus: event.currentTarget.value as PullRequestStatusFilter,
+                  })}
+              >
+                <option value="mergeable">Mergeable now</option>
+                <option value="blocked">Blocked</option>
+                <option value="attention">Needs review</option>
+                <option value="all">All states</option>
+              </select>
+            </div>
+
+            <div className="field">
               <label className="label" htmlFor="repo-scope">Repository scope</label>
               <select
                 id="repo-scope"
@@ -833,6 +1091,16 @@ export function SettingsScreen({
                 <option value="contributing">Only contributing repos</option>
               </select>
             </div>
+
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={settings.includeArchivedRepositories}
+                onChange={(event) =>
+                  onUpdateSettings({ includeArchivedRepositories: event.currentTarget.checked })}
+              />
+              Include archived repositories
+            </label>
 
             <div className="field">
               <label className="label" htmlFor="alert-threshold">Workflow alert threshold</label>
@@ -888,32 +1156,6 @@ export function SettingsScreen({
               />
             </div>
 
-            <div className="field">
-              <label className="label" htmlFor="openobserve-endpoint">OpenObserve endpoint</label>
-              <input
-                id="openobserve-endpoint"
-                type="url"
-                value={settings.openObserveEndpoint}
-                placeholder="http://localhost:5080/api/default/nodejs/_json"
-                onChange={(event) =>
-                  onUpdateSettings({ openObserveEndpoint: event.currentTarget.value })}
-              />
-            </div>
-
-            <div className="field">
-              <label className="label" htmlFor="openobserve-access-key">
-                OpenObserve access key
-              </label>
-              <input
-                id="openobserve-access-key"
-                type="password"
-                value={settings.openObserveAccessKey}
-                placeholder="Stored locally only"
-                onChange={(event) =>
-                  onUpdateSettings({ openObserveAccessKey: event.currentTarget.value })}
-              />
-            </div>
-
             <div className="row">
               <button
                 className="btn btn-primary"
@@ -935,17 +1177,34 @@ export function SettingsScreen({
           <div className="card card-muted stack">
             <h3>Current profile</h3>
             <MetricSummary label="PR hub default" value={settings.pullRequestCreator} />
+            <MetricSummary label="Default PR state" value={settings.pullRequestStatus} />
             <MetricSummary label="Sort order" value={settings.pullRequestSort} />
             <MetricSummary label="Repo scope" value={settings.repositoryScope} />
             <MetricSummary label="Workflow threshold" value={settings.workflowAlertThreshold} />
-            <MetricSummary
-              label="OpenObserve logging"
-              value={settings.openObserveAccessKey ? "enabled" : "disabled"}
-            />
-            <p className="label">
-              The access key stays in local storage. The repo only carries the endpoint and blank
-              env placeholders so secrets are not committed.
-            </p>
+            <div className="setup-doc">
+              <h3>GitHub token setup</h3>
+              <p className="label">
+                Prefer a fine-grained personal access token. Store it only in this browser; do not
+                commit it or bake it into a public Pages build.
+              </p>
+              <ol>
+                <li>Create a token from GitHub Developer settings.</li>
+                <li>Select the owners and repositories you want this dashboard to manage.</li>
+                <li>Grant pull request read/write permission for merge actions.</li>
+                <li>
+                  Grant contents read/write if branch protection or merge strategies require it.
+                </li>
+                <li>
+                  Grant actions read if you want workflow state to explain why a PR is blocked.
+                </li>
+                <li>Paste the token here and switch Data source to Live GitHub API.</li>
+              </ol>
+              <p className="label">
+                Classic tokens work too: use repo for private repos, public_repo for public-only
+                repos, read:org for organization discovery, and workflow only if your policy needs
+                workflow access.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -983,6 +1242,23 @@ function MetricCard({ label, value }: { readonly label: string; readonly value: 
   return (
     <div className="card metric">
       <span className="value">{value}</span>
+      <span className="label">{label}</span>
+    </div>
+  );
+}
+
+function PreflightCard({
+  label,
+  tone,
+  value,
+}: {
+  readonly label: string;
+  readonly tone: "success" | "warning" | "danger";
+  readonly value: string;
+}) {
+  return (
+    <div className={`preflight-card preflight-card--${tone}`}>
+      <span className="value mono">{value}</span>
       <span className="label">{label}</span>
     </div>
   );
@@ -1032,6 +1308,55 @@ function ScreenFooter({
 
 function countOpenIssues(data: DashboardData): number {
   return data.repositories.reduce((total, repository) => total + repository.openIssueCount, 0);
+}
+
+function sortRepositoriesForDashboard(
+  repositories: readonly RepositorySummary[],
+  sortOrder: RepositorySortOrder,
+): readonly RepositorySummary[] {
+  if (sortOrder === "open-prs") {
+    return [...repositories].toSorted((left, right) =>
+      right.openPrCount - left.openPrCount || right.lastCommitAt.localeCompare(left.lastCommitAt)
+    );
+  }
+
+  if (sortOrder === "updated") {
+    return [...repositories].toSorted((left, right) =>
+      right.lastCommitAt.localeCompare(left.lastCommitAt)
+    );
+  }
+
+  return [...repositories].toSorted((left, right) =>
+    getRepositoryAttentionScore(right) - getRepositoryAttentionScore(left) ||
+    right.lastCommitAt.localeCompare(left.lastCommitAt)
+  );
+}
+
+function getRepositoryAttentionScore(repository: RepositorySummary): number {
+  const workflowScore = repository.workflowState === "failing"
+    ? 8
+    : repository.workflowState === "warning"
+    ? 4
+    : 0;
+
+  return workflowScore + repository.openPrCount * 2 + repository.reviewRequests +
+    repository.openIssueCount;
+}
+
+function renderRepositoryAttention(repository: RepositorySummary) {
+  if (repository.archived) {
+    return <StatusPill>Archived</StatusPill>;
+  }
+
+  if (repository.workflowState === "failing") {
+    return <StatusPill tone="danger">Build failing</StatusPill>;
+  }
+
+  if (repository.openPrCount > 0) {
+    return <StatusPill tone="warning">{repository.openPrCount} PRs open</StatusPill>;
+  }
+
+  return <StatusPill tone="success">Quiet</StatusPill>;
 }
 
 function formatGroup(group: RepositorySummary["group"]): string {
@@ -1096,6 +1421,23 @@ function getPullRequestCreatorCategory(
   return "all";
 }
 
+function getPullRequestStatusBucket(
+  pullRequest: PullRequestSummary,
+): PullRequestStatusFilter {
+  if (isPullRequestMergeBlocked(pullRequest) || pullRequest.draft) {
+    return "blocked";
+  }
+
+  if (
+    pullRequest.reviewState === "needs-review" ||
+    pullRequest.reviewState === "changes-requested"
+  ) {
+    return "attention";
+  }
+
+  return "mergeable";
+}
+
 function formatPullRequestCreator(category: PullRequestCreatorFilter, author: string): string {
   switch (category) {
     case "dependabot":
@@ -1141,7 +1483,37 @@ function getPullRequestUrgency(pullRequest: PullRequestSummary): number {
 }
 
 function isPullRequestMergeBlocked(pullRequest: PullRequestSummary): boolean {
-  return pullRequest.mergeConflict || pullRequest.checksSummary.toLowerCase().includes("fail");
+  return pullRequest.mergeConflict ||
+    pullRequest.draft ||
+    pullRequest.reviewState === "changes-requested" ||
+    pullRequest.checksSummary.toLowerCase().includes("fail");
+}
+
+function getPullRequestBlockReason(pullRequest: PullRequestSummary): string {
+  if (pullRequest.mergeConflict) {
+    return "Skipped because GitHub reports or the title suggests a merge conflict.";
+  }
+
+  if (pullRequest.checksSummary.toLowerCase().includes("fail")) {
+    return "Skipped because checks are failing.";
+  }
+
+  if (pullRequest.draft) {
+    return "Skipped because the pull request is still a draft.";
+  }
+
+  if (pullRequest.reviewState === "changes-requested") {
+    return "Skipped because changes were requested.";
+  }
+
+  return "Skipped by preflight.";
+}
+
+function hasPassingChecks(pullRequest: PullRequestSummary): boolean {
+  const normalizedSummary = pullRequest.checksSummary.toLowerCase();
+  return normalizedSummary.includes("pass") ||
+    normalizedSummary.includes("green") ||
+    normalizedSummary.includes("ready");
 }
 
 function renderPullRequestStatus(pullRequest: PullRequestSummary) {
@@ -1169,6 +1541,28 @@ function formatPullRequestMeta(pullRequest: PullRequestSummary): string {
   return `${pullRequest.repositoryFullName} · ${pullRequest.checksSummary} · ${
     formatDateTime(pullRequest.updatedAt)
   }`;
+}
+
+function formatMergeOutcome(outcome: MergeOutcome): string {
+  switch (outcome) {
+    case "merged":
+      return "Merged";
+    case "failed":
+      return "Failed";
+    case "skipped":
+      return "Skipped";
+  }
+}
+
+function mapMergeOutcomeTone(outcome: MergeOutcome): "success" | "warning" | "danger" {
+  switch (outcome) {
+    case "merged":
+      return "success";
+    case "failed":
+      return "danger";
+    case "skipped":
+      return "warning";
+  }
 }
 
 function matchesWorkflowThreshold(

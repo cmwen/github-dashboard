@@ -1,14 +1,7 @@
 import { type Logger, pino } from "pino";
 
-import type { AppSettings } from "./settings.ts";
-
 type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 type LogFields = Record<string, unknown>;
-
-interface OpenObserveConfig {
-  endpoint: string;
-  accessKey: string;
-}
 
 interface BrowserLogRecord extends LogFields {
   level?: number;
@@ -16,24 +9,9 @@ interface BrowserLogRecord extends LogFields {
   time?: number;
 }
 
-const DEFAULT_ENDPOINT = import.meta.env.VITE_OPENOBSERVE_ENDPOINT?.trim() ??
-  "http://localhost:5080/api/default/nodejs/_json";
-
-let openObserveConfig: OpenObserveConfig = {
-  endpoint: DEFAULT_ENDPOINT,
-  accessKey: import.meta.env.VITE_OPENOBSERVE_ACCESS_KEY?.trim() ?? "",
-};
-
 let globalErrorHandlersInstalled = false;
 
 export const logger = createLogger();
-
-export function configureLogger(settings: AppSettings): void {
-  openObserveConfig = {
-    endpoint: settings.openObserveEndpoint.trim(),
-    accessKey: settings.openObserveAccessKey.trim(),
-  };
-}
 
 export function installGlobalErrorHandlers(): void {
   if (globalErrorHandlersInstalled || typeof globalThis === "undefined") {
@@ -63,14 +41,6 @@ export function installGlobalErrorHandlers(): void {
   });
 }
 
-export function createAuthorizationHeader(accessKey: string): string {
-  return `Basic ${accessKey}`;
-}
-
-export function isOpenObserveEnabled(config: OpenObserveConfig): boolean {
-  return config.endpoint.trim().length > 0 && config.accessKey.trim().length > 0;
-}
-
 function createLogger(): Logger {
   return pino({
     name: "github-dashboard",
@@ -84,43 +54,9 @@ function createLogger(): Logger {
       write: (record: object) => {
         const normalizedRecord = normalizeBrowserRecord(record);
         writeToConsole(normalizedRecord);
-        void writeToOpenObserve(normalizedRecord);
       },
     },
   });
-}
-
-async function writeToOpenObserve(record: BrowserLogRecord): Promise<void> {
-  if (!isOpenObserveEnabled(openObserveConfig)) {
-    return;
-  }
-
-  const payload = {
-    ...record,
-    level_name: mapLevelNumberToLabel(record.level),
-    timestamp: new Date(record.time ?? Date.now()).toISOString(),
-  };
-
-  try {
-    const response = await fetch(openObserveConfig.endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: createAuthorizationHeader(openObserveConfig.accessKey),
-      },
-      body: JSON.stringify(payload),
-      keepalive: true,
-    });
-
-    if (!response.ok) {
-      console.error("OpenObserve log shipping failed", {
-        status: response.status,
-        statusText: response.statusText,
-      });
-    }
-  } catch (error) {
-    console.error("OpenObserve log shipping failed", error);
-  }
 }
 
 function writeToConsole(record: BrowserLogRecord): void {

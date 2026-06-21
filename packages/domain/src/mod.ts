@@ -29,6 +29,7 @@ export interface RepositorySummary {
   readonly reviewRequests: number;
   readonly workflowState: WorkflowState;
   readonly stars: number;
+  readonly archived: boolean;
 }
 
 export interface PullRequestSummary {
@@ -94,6 +95,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     reviewRequests: 1,
     workflowState: "warning",
     stars: 8,
+    archived: false,
   },
   {
     id: "org-payments-service",
@@ -110,6 +112,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     reviewRequests: 2,
     workflowState: "failing",
     stars: 124,
+    archived: false,
   },
   {
     id: "oss-cache-layer",
@@ -126,6 +129,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     reviewRequests: 1,
     workflowState: "healthy",
     stars: 2031,
+    archived: false,
   },
   {
     id: "org-frontend-app",
@@ -142,6 +146,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     reviewRequests: 3,
     workflowState: "warning",
     stars: 93,
+    archived: false,
   },
   {
     id: "personal-cli-tools",
@@ -158,6 +163,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     reviewRequests: 0,
     workflowState: "healthy",
     stars: 15,
+    archived: true,
   },
 ] as const;
 
@@ -179,9 +185,9 @@ export const mockPullRequests: readonly PullRequestSummary[] = [
   {
     id: 102,
     repositoryFullName: "org/payments-service",
-    title: "Retry failed receipt webhook deliveries",
+    title: "Bump pg from 8.12.0 to 8.13.1",
     number: 928,
-    author: "teammate-a",
+    author: "dependabot[bot]",
     updatedAt: "2026-06-05T23:48:00Z",
     reviewState: "changes-requested",
     checksSummary: "2 failing checks",
@@ -193,13 +199,13 @@ export const mockPullRequests: readonly PullRequestSummary[] = [
   {
     id: 103,
     repositoryFullName: "org/frontend-app",
-    title: "Refine retry UX for checkout failure states",
+    title: "Bump vite-plugin-pwa from 1.0.0 to 1.0.1",
     number: 441,
-    author: "teammate-b",
+    author: "dependabot[bot]",
     updatedAt: "2026-06-06T07:34:00Z",
-    reviewState: "needs-review",
-    checksSummary: "Preview ready · visual diff clean",
-    labelNames: ["frontend", "checkout"],
+    reviewState: "ready-to-merge",
+    checksSummary: "All checks green",
+    labelNames: ["frontend", "dependencies", "ready-to-merge"],
     draft: false,
     mergeConflict: false,
     url: "https://github.com/org/frontend-app/pull/441",
@@ -207,13 +213,13 @@ export const mockPullRequests: readonly PullRequestSummary[] = [
   {
     id: 104,
     repositoryFullName: "oss/cache-layer",
-    title: "Expose TTL policies via config builder",
+    title: "Bump tokio from 1.44.0 to 1.45.1",
     number: 74,
-    author: "oss-maintainer",
+    author: "dependabot[bot]",
     updatedAt: "2026-06-04T11:21:00Z",
     reviewState: "ready-to-merge",
     checksSummary: "All checks green",
-    labelNames: ["api"],
+    labelNames: ["dependencies", "ready-to-merge"],
     draft: false,
     mergeConflict: false,
     url: "https://github.com/oss/cache-layer/pull/74",
