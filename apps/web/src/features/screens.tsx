@@ -443,8 +443,8 @@ export function DashboardScreen({
                               />
                               <div className="topic-editor__actions">
                                 <span className="muted">
-                                  Labels are saved as GitHub repository topics. Use lowercase; spaces
-                                  become hyphens.
+                                  Labels are saved as GitHub repository topics. Use lowercase;
+                                  spaces become hyphens.
                                 </span>
                                 <button
                                   className="btn btn-primary"

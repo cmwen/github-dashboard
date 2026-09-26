@@ -66,11 +66,11 @@ be shipped to every browser that loads the site.
 For all current live-data features, create a **fine-grained personal access token**, select the
 repositories the dashboard should access, and grant these repository permissions:
 
-| Permission | Access | Used for |
-| --- | --- | --- |
-| Metadata | Read-only (included automatically) | Identify and list repositories |
-| Actions | Read-only | Read recent workflow runs |
-| Administration | Read and write | Edit repository topics used as repository labels |
+| Permission     | Access                             | Used for                                         |
+| -------------- | ---------------------------------- | ------------------------------------------------ |
+| Metadata       | Read-only (included automatically) | Identify and list repositories                   |
+| Actions        | Read-only                          | Read recent workflow runs                        |
+| Administration | Read and write                     | Edit repository topics used as repository labels |
 
 The app currently searches for pull requests through GitHub's search endpoint, which does not
 require Issues or Pull requests permissions for fine-grained tokens. If you only need to view data,
