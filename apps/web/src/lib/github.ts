@@ -50,6 +50,7 @@ interface GitHubRepositorySummary {
     readonly type?: string | null;
   };
   readonly description?: string | null;
+  readonly topics?: readonly string[] | null;
   readonly permissions?: {
     readonly admin?: boolean | null;
   } | null;
@@ -521,6 +522,7 @@ function mapRepositorySummary(
     name: repository.name,
     owner: repository.owner.login,
     description: repository.description ?? "No description provided.",
+    topics: repository.topics ?? [],
     group: repository.owner.type === "Organization"
       ? "organization"
       : repository.permissions?.admin
