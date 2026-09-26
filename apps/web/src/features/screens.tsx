@@ -33,6 +33,8 @@ export interface DashboardScreenProps {
   readonly data?: DashboardData;
   readonly settings: AppSettings;
   readonly onUpdateSettings: (patch: Partial<AppSettings>) => void;
+  readonly onSaveTopics: (owner: string, repo: string, topics: readonly string[]) => Promise<void>;
+  readonly topicsEditable: boolean;
   readonly state: ScreenState;
 }
 
@@ -147,16 +149,30 @@ export function LauncherScreen({ data, state }: SharedScreenProps) {
 
 export function DashboardScreen({
   data,
+  onSaveTopics,
   onUpdateSettings,
   settings,
   state,
+  topicsEditable,
 }: DashboardScreenProps) {
+  const [selectedTopic, setSelectedTopic] = useState("all");
+  const [groupByTopic, setGroupByTopic] = useState(false);
+  const [editingRepository, setEditingRepository] = useState<string>();
+  const [draftTopics, setDraftTopics] = useState("");
+  const [topicSaveError, setTopicSaveError] = useState<string>();
+  const [savingTopics, setSavingTopics] = useState(false);
+  const allTopics = [
+    ...new Set((data?.repositories ?? []).flatMap((repository) => repository.topics)),
+  ]
+    .toSorted((a, b) => a.localeCompare(b));
   const repositories = data
     ? sortRepositoriesForDashboard(
       filterRepositories(data.repositories, {
         searchTerm: settings.repositorySearch,
         group: settings.repositoryGroup,
-      }),
+      }).filter((repository) =>
+        selectedTopic === "all" || repository.topics.includes(selectedTopic)
+      ),
       settings.repositorySort,
     )
     : [];
@@ -168,6 +184,42 @@ export function DashboardScreen({
     repositories.filter((repository) => repository.workflowState === "failing").length;
   const visibleArchivedRepositories = repositories.filter((repository) => repository.archived)
     .length;
+
+  async function saveTopics(owner: string, repo: string) {
+    setSavingTopics(true);
+    setTopicSaveError(undefined);
+    try {
+      await onSaveTopics(
+        owner,
+        repo,
+        draftTopics.split(",").map((topic) => topic.trim()).filter(Boolean),
+      );
+      setEditingRepository(undefined);
+    } catch (error) {
+      setTopicSaveError(
+        error instanceof Error ? error.message : "Could not update repository topics.",
+      );
+    } finally {
+      setSavingTopics(false);
+    }
+  }
+
+  const displayedGroups = groupByTopic
+    ? [
+      ...allTopics.filter((topic) => selectedTopic === "all" || selectedTopic === topic)
+        .map((topic) => ({
+          topic,
+          repositories: repositories.filter((repository) => repository.topics.includes(topic)),
+        }))
+        .filter((group) => group.repositories.length > 0),
+      ...(selectedTopic === "all"
+        ? [{
+          topic: "No topics",
+          repositories: repositories.filter((repository) => repository.topics.length === 0),
+        }]
+        : []),
+    ].filter((group) => group.repositories.length > 0)
+    : [{ topic: "", repositories }];
 
   return (
     <section className="screen">
@@ -196,6 +248,33 @@ export function DashboardScreen({
                 onUpdateSettings({ repositorySearch: event.currentTarget.value })}
             />
           </div>
+          <div className="field">
+            <label className="label" htmlFor="repo-topic-filter">Repository label (topic)</label>
+            <select
+              id="repo-topic-filter"
+              value={selectedTopic}
+              onChange={(event) => setSelectedTopic(event.currentTarget.value)}
+            >
+              <option value="all">
+                All repository labels ({data?.repositories.length ?? 0} repositories)
+              </option>
+              {allTopics.map((topic) => (
+                <option key={topic} value={topic}>
+                  {topic}{" "}
+                  ({data?.repositories.filter((repository) => repository.topics.includes(topic))
+                    .length})
+                </option>
+              ))}
+            </select>
+          </div>
+          <label className="topic-group-toggle">
+            <input
+              type="checkbox"
+              checked={groupByTopic}
+              onChange={(event) => setGroupByTopic(event.currentTarget.checked)}
+            />{" "}
+            Group by label
+          </label>
           <div className="field">
             <label className="label" htmlFor="repo-group">Group</label>
             <select
@@ -237,6 +316,12 @@ export function DashboardScreen({
             Include archived repos
           </label>
         </div>
+        {!topicsEditable && (
+          <p className="topic-help">
+            Connect a GitHub token and select Live GitHub API in Settings to add or remove
+            repository labels (GitHub topics).
+          </p>
+        )}
       </section>
 
       {data && (
@@ -268,6 +353,7 @@ export function DashboardScreen({
                 <th>Latest commit</th>
                 <th>Open PRs</th>
                 <th>Open issues</th>
+                <th>Repository labels</th>
                 <th>Workflow</th>
               </tr>
             </thead>
@@ -275,35 +361,118 @@ export function DashboardScreen({
               {repositories.length === 0
                 ? (
                   <tr>
-                    <td className="empty" colSpan={7}>No repositories match this filter.</td>
+                    <td className="empty" colSpan={8}>No repositories match this filter.</td>
                   </tr>
                 )
-                : repositories.map((repository) => (
-                  <tr
-                    className={repository.archived ? "row-muted" : undefined}
-                    key={repository.id}
-                  >
-                    <td>
-                      <Link
-                        className="inline-link"
-                        to={`/repositories/${repository.owner}/${repository.name}`}
-                      >
-                        {repository.fullName}
-                      </Link>
-                      {repository.archived && <span className="subtle-row-note">Archived</span>}
-                    </td>
-                    <td>{renderRepositoryAttention(repository)}</td>
-                    <td>{formatGroup(repository.group)}</td>
-                    <td className="mono">{formatDateTime(repository.lastCommitAt)}</td>
-                    <td className="mono">{repository.openPrCount}</td>
-                    <td className="mono">{repository.openIssueCount}</td>
-                    <td>
-                      <StatusPill tone={mapWorkflowTone(repository.workflowState)}>
-                        {formatRepositoryWorkflowLabel(repository.workflowState)}
-                      </StatusPill>
-                    </td>
-                  </tr>
-                ))}
+                : displayedGroups.flatMap((group) => [
+                  ...(group.topic
+                    ? [
+                      <tr className="topic-group-heading" key={`topic-${group.topic}`}>
+                        <th colSpan={8}>
+                          {group.topic} <span>{group.repositories.length} repositories</span>
+                        </th>
+                      </tr>,
+                    ]
+                    : []),
+                  ...group.repositories.map((repository) => (
+                    <React.Fragment key={repository.id}>
+                      <tr className={repository.archived ? "row-muted" : undefined}>
+                        <td>
+                          <Link
+                            className="inline-link"
+                            to={`/repositories/${repository.owner}/${repository.name}`}
+                          >
+                            {repository.fullName}
+                          </Link>
+                          {repository.archived && <span className="subtle-row-note">Archived</span>}
+                        </td>
+                        <td>{renderRepositoryAttention(repository)}</td>
+                        <td>{formatGroup(repository.group)}</td>
+                        <td className="mono">{formatDateTime(repository.lastCommitAt)}</td>
+                        <td className="mono">{repository.openPrCount}</td>
+                        <td className="mono">{repository.openIssueCount}</td>
+                        <td>
+                          <div className="topic-list">
+                            {repository.topics.length
+                              ? repository.topics.map((topic) => (
+                                <button
+                                  className="topic-chip"
+                                  key={topic}
+                                  type="button"
+                                  onClick={() => setSelectedTopic(topic)}
+                                >
+                                  {topic}
+                                </button>
+                              ))
+                              : <span className="muted">No topics</span>}
+                            <button
+                              className="topic-edit-link"
+                              type="button"
+                              disabled={!topicsEditable}
+                              title={topicsEditable
+                                ? "Edit repository labels"
+                                : "Connect a token in Settings to edit repository labels"}
+                              onClick={() => {
+                                setEditingRepository(repository.fullName);
+                                setDraftTopics(repository.topics.join(", "));
+                                setTopicSaveError(undefined);
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </td>
+                        <td>
+                          <StatusPill tone={mapWorkflowTone(repository.workflowState)}>
+                            {formatRepositoryWorkflowLabel(repository.workflowState)}
+                          </StatusPill>
+                        </td>
+                      </tr>
+                      {editingRepository === repository.fullName && (
+                        <tr>
+                          <td colSpan={8}>
+                            <div className="topic-editor">
+                              <label className="label" htmlFor={`topics-${repository.id}`}>
+                                Repository labels (GitHub topics), separated by commas
+                              </label>
+                              <input
+                                id={`topics-${repository.id}`}
+                                value={draftTopics}
+                                onChange={(event) => setDraftTopics(event.currentTarget.value)}
+                                placeholder="ai, local-first, typescript"
+                              />
+                              <div className="topic-editor__actions">
+                                <span className="muted">
+                                  Labels are saved as GitHub repository topics. Use lowercase; spaces
+                                  become hyphens.
+                                </span>
+                                <button
+                                  className="btn btn-primary"
+                                  type="button"
+                                  disabled={savingTopics || !topicsEditable}
+                                  onClick={() => void saveTopics(repository.owner, repository.name)}
+                                >
+                                  {savingTopics ? "Saving…" : "Save labels"}
+                                </button>
+                                <button
+                                  className="btn"
+                                  type="button"
+                                  disabled={savingTopics}
+                                  onClick={() => setEditingRepository(undefined)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {topicSaveError && (
+                                <p className="form-error" role="alert">{topicSaveError}</p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  )),
+                ])}
             </tbody>
           </table>
         </div>

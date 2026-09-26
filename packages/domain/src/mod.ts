@@ -20,6 +20,7 @@ export interface RepositorySummary {
   readonly name: string;
   readonly owner: string;
   readonly description: string;
+  readonly topics: readonly string[];
   readonly group: RepoGroup;
   readonly primaryLanguage: string;
   readonly defaultBranch: string;
@@ -86,6 +87,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     name: "notebook-api",
     owner: "personal",
     description: "API powering note sync, sharing, and offline conflict resolution.",
+    topics: ["api", "offline-first", "typescript"],
     group: "personal",
     primaryLanguage: "TypeScript",
     defaultBranch: "main",
@@ -103,6 +105,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     name: "payments-service",
     owner: "org",
     description: "Handles billing events, invoice generation, and gateway webhooks.",
+    topics: ["payments", "go", "backend"],
     group: "organization",
     primaryLanguage: "Go",
     defaultBranch: "main",
@@ -120,6 +123,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     name: "cache-layer",
     owner: "oss",
     description: "An OSS cache orchestration library with Redis and SQLite adapters.",
+    topics: ["cache", "redis", "sqlite", "rust"],
     group: "contributing",
     primaryLanguage: "Rust",
     defaultBranch: "main",
@@ -137,6 +141,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     name: "frontend-app",
     owner: "org",
     description: "Customer-facing web app with feature flags, analytics, and checkout.",
+    topics: ["web-app", "typescript", "analytics"],
     group: "organization",
     primaryLanguage: "TypeScript",
     defaultBranch: "main",
@@ -154,6 +159,7 @@ export const mockRepositories: readonly RepositorySummary[] = [
     name: "cli-tools",
     owner: "personal",
     description: "A toolbox of scripts and Deno CLIs for project automation.",
+    topics: ["cli", "deno", "automation"],
     group: "personal",
     primaryLanguage: "Deno",
     defaultBranch: "main",

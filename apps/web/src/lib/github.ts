@@ -15,6 +15,28 @@ import {
 import { logger } from "./logger.ts";
 import type { AppSettings } from "./settings.ts";
 
+export async function updateRepositoryTopics(
+  settings: AppSettings,
+  owner: string,
+  repo: string,
+  topics: readonly string[],
+): Promise<void> {
+  if (settings.dataSource !== "live" || !settings.token) {
+    throw new Error("Connect a GitHub token in Settings to edit repository topics.");
+  }
+
+  const octokit = new Octokit({ auth: settings.token });
+  await octokit.request("PUT /repos/{owner}/{repo}/topics", {
+    owner,
+    repo,
+    names: [
+      ...new Set(
+        topics.map((topic) => topic.trim().toLowerCase().replace(/\s+/g, "-")).filter(Boolean),
+      ),
+    ],
+  });
+}
+
 interface SearchIssueLabel {
   readonly name?: string | null;
 }

@@ -61,6 +61,35 @@ Classic token fallback:
 Never commit a PAT. Avoid setting `VITE_GITHUB_TOKEN` in GitHub Pages builds because the token would
 be shipped to every browser that loads the site.
 
+### GitHub token permissions
+
+For all current live-data features, create a **fine-grained personal access token**, select the
+repositories the dashboard should access, and grant these repository permissions:
+
+| Permission | Access | Used for |
+| --- | --- | --- |
+| Metadata | Read-only (included automatically) | Identify and list repositories |
+| Actions | Read-only | Read recent workflow runs |
+| Administration | Read and write | Edit repository topics used as repository labels |
+
+The app currently searches for pull requests through GitHub's search endpoint, which does not
+require Issues or Pull requests permissions for fine-grained tokens. If you only need to view data,
+omit Administration write; editing repository labels/topics will then be unavailable.
+
+The token owner must already have access to the selected repositories. Editing topics also requires
+sufficient repository privileges.
+
+Repository labels in this dashboard are GitHub **repository topics**. They can be applied from the
+dashboard, used to filter repositories, and grouped so a repository with multiple topics appears in
+each matching group. GitHub issue/PR labels are separate: the dashboard reads PR labels but does not
+apply them. The classic-token alternative is the broad `repo` scope for private repositories (or
+`public_repo` for public repositories only); fine-grained tokens are recommended.
+
+> **Pages security:** A token entered in this browser app is stored in browser local storage and is
+> sent directly to GitHub. Never put a personal token in `VITE_GITHUB_TOKEN` for a public Pages
+> deployment: build-time environment values are embedded in the public JavaScript bundle. Use mock
+> mode for a public deployment, or run the app privately and enter the token in Settings.
+
 ## Commands
 
 ```bash

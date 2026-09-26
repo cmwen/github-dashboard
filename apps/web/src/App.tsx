@@ -11,7 +11,7 @@ import {
   SettingsScreen,
   WorkflowsScreen,
 } from "./features/screens.tsx";
-import { loadDashboardData } from "./lib/github.ts";
+import { loadDashboardData, updateRepositoryTopics } from "./lib/github.ts";
 import { installGlobalErrorHandlers, logger } from "./lib/logger.ts";
 import {
   type AppSettings,
@@ -139,8 +139,13 @@ function DashboardApplication() {
             element={
               <DashboardScreen
                 data={query.data}
+                onSaveTopics={async (owner, repo, topics) => {
+                  await updateRepositoryTopics(settings, owner, repo, topics);
+                  await query.refetch();
+                }}
                 onUpdateSettings={applySettingsPatch}
                 settings={settings}
+                topicsEditable={settings.dataSource === "live" && settings.token.length > 0}
                 state={screenState}
               />
             }
